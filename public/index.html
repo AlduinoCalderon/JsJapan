@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Finger Gesture Sound App</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      background-color: #f0f0f0;
+    }
+    
+    h1 {
+      color: #333;
+    }
+    
+    .container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      width: 100%;
+      max-width: 800px;
+    }
+    
+    .video-container {
+      position: relative;
+      margin: 20px 0;
+      width: 80rem;
+      height: 60rem;
+      border: 3px solid #333;
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    
+    #video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transform: scaleX(-1);
+    }
+    
+    #canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      transform: scaleX(-1);
+    }
+    
+    .controls {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin: 20px 0;
+      width: 100%;
+    }
+    
+    .control-row {
+      display: flex;
+      justify-content: space-between;
+      width: 100%;
+    }
+    
+    button {
+      padding: 10px 15px;
+      font-size: 16px;
+      background-color: #4CAF50;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      transition: background-color 0.3s;
+    }
+    
+    button:hover {
+      background-color: #45a049;
+    }
+    
+    button:disabled {
+      background-color: #cccccc;
+      cursor: not-allowed;
+    }
+    
+    .sound-mapping {
+      width: 100%;
+      margin-top: 20px;
+      border-collapse: collapse;
+    }
+    
+    .sound-mapping th, .sound-mapping td {
+      border: 1px solid #ddd;
+      padding: 8px;
+      text-align: left;
+    }
+    
+    .sound-mapping th {
+      background-color: #f2f2f2;
+    }
+    
+    .gesture-display {
+      margin-top: 10px;
+      padding: 10px;
+      background-color: #e7f3fe;
+      border-left: 6px solid #2196F3;
+      font-size: 18px;
+    }
+    
+    .finger-count {
+      font-weight: bold;
+      color: #2196F3;
+    }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915/hands.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3.1640029074/camera_utils.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils@0.3.1620248257/drawing_utils.js"></script>
+</head>
+<body>
+  <div class="container">
+    <h1>Finger Gesture Sound App</h1>
+    
+    <div class="video-container">
+      <video id="video" playsinline></video>
+      <canvas id="canvas"></canvas>
+    </div>
+    
+    <div class="gesture-display">
+      Detected fingers: <span class="finger-count" id="fingerCount">0</span>
+    </div>
+    
+    <div class="controls">
+      <div class="control-row">
+        <button id="startCamera">Start Camera</button>
+        <button id="stopCamera" disabled>Stop Camera</button>
+      </div>
+      <div class="control-row">
+        <button id="enableSound">Enable Sound</button>
+        <button id="disableSound" disabled>Disable Sound</button>
+      </div>
+    </div>
+    
+    <h2>Gesture Sound Mapping</h2>
+    <table class="sound-mapping">
+      <thead>
+        <tr>
+          <th>Fingers</th>
+          <th>Sound</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>1 finger</td>
+          <td>Piano C note</td>
+        </tr>
+        <tr>
+          <td>2 fingers</td>
+          <td>Piano D note</td>
+        </tr>
+        <tr>
+          <td>3 fingers</td>
+          <td>Piano E note</td>
+        </tr>
+        <tr>
+          <td>4 fingers</td>
+          <td>Piano F note</td>
+        </tr>
+        <tr>
+          <td>5 fingers</td>
+          <td>Piano G note</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <script>
+    // DOM elements
+    const videoElement = document.getElementById('video');
+    const canvasElement = document.getElementById('canvas');
+    const canvasCtx = canvasElement.getContext('2d');
+    const fingerCountElement = document.getElementById('fingerCount');
+    const startCameraButton = document.getElementById('startCamera');
+    const stopCameraButton = document.getElementById('stopCamera');
+    const enableSoundButton = document.getElementById('enableSound');
+    const disableSoundButton = document.getElementById('disableSound');
+    
+    // Audio context and sounds
+    let audioContext;
+    let soundEnabled = false;
+    const sounds = {};
+    
+    // MediaPipe Hands
+    const hands = new Hands({
+      locateFile: (file) => {
+        return `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915/${file}`;
+      }
+    });
+    
+    hands.setOptions({
+      maxNumHands: 1,
+      modelComplexity: 1,
+      minDetectionConfidence: 0.5,
+      minTrackingConfidence: 0.5
+    });
+    
+    // Camera
+    let camera;
+    let previousFingerCount = -1;
+    
+    // Set up canvas size
+    function setupCanvas() {
+      canvasElement.width = videoElement.videoWidth;
+      canvasElement.height = videoElement.videoHeight;
+    }
+    
+    // Initialize audio context and load sounds
+    async function initAudio() {
+      try {
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        
+        // Define notes frequencies
+        const noteFrequencies = {
+          'C': 261.63, // C4
+          'D': 293.66, // D4
+          'E': 329.63, // E4
+          'F': 349.23, // F4
+          'G': 392.00  // G4
+        };
+        
+        // Create oscillator functions for each note
+        for (const [note, frequency] of Object.entries(noteFrequencies)) {
+          sounds[note] = () => {
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+            
+            oscillator.type = 'sine';
+            oscillator.frequency.setValueAtTime(frequency, audioContext.currentTime);
+            
+            gainNode.gain.setValueAtTime(0, audioContext.currentTime);
+            gainNode.gain.linearRampToValueAtTime(0.5, audioContext.currentTime + 0.1);
+            gainNode.gain.linearRampToValueAtTime(0, audioContext.currentTime + 1);
+            
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+            
+            oscillator.start();
+            oscillator.stop(audioContext.currentTime + 1);
+          };
+        }
+        
+        soundEnabled = true;
+        enableSoundButton.disabled = true;
+        disableSoundButton.disabled = false;
+      } catch (error) {
+        console.error('Error initializing audio:', error);
+        alert('Failed to initialize audio. Please try again.');
+      }
+    }
+    
+    // Play sound based on finger count
+    function playSound(fingerCount) {
+      if (!soundEnabled || !audioContext) return;
+      
+      const notes = ['C', 'D', 'E', 'F', 'G'];
+      if (fingerCount >= 1 && fingerCount <= 5) {
+        const note = notes[fingerCount - 1];
+        sounds[note]();
+      }
+    }
+    
+    // Count extended fingers
+    function countExtendedFingers(landmarks) {
+      // Define finger tip indices
+      const tipIndices = [4, 8, 12, 16, 20]; // thumb, index, middle, ring, pinky
+      const pipIndices = [2, 6, 10, 14, 18]; // proximal joints
+      
+      let extendedFingers = 0;
+      
+      // Check if each finger is extended
+      for (let i = 0; i < 5; i++) {
+        const tip = landmarks[tipIndices[i]];
+        const pip = landmarks[pipIndices[i]];
+        
+        // Special case for thumb (compare with wrist)
+        if (i === 0) {
+          const wrist = landmarks[0];
+          if (tip.x < wrist.x) { // Thumb is considered extended if it's to the left of the wrist
+            extendedFingers++;
+          }
+        } else {
+          // For other fingers, compare tip Y coordinate with PIP Y coordinate
+          if (tip.y < pip.y) {
+            extendedFingers++;
+          }
+        }
+      }
+      
+      return extendedFingers;
+    }
+    
+    // Process results from MediaPipe Hands
+    function onResults(results) {
+      canvasCtx.save();
+      canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+      
+      // Draw video frame
+      canvasCtx.drawImage(videoElement, 0, 0, canvasElement.width, canvasElement.height);
+      
+      if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+        // Draw hand landmarks
+        for (const landmarks of results.multiHandLandmarks) {
+          drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, {color: '#00FF00', lineWidth: 5});
+          drawLandmarks(canvasCtx, landmarks, {color: '#FF0000', lineWidth: 2});
+          
+          // Count extended fingers
+          const extendedFingers = countExtendedFingers(landmarks);
+          fingerCountElement.textContent = extendedFingers;
+          
+          // Play sound when finger count changes
+          if (previousFingerCount !== extendedFingers) {
+            playSound(extendedFingers);
+            previousFingerCount = extendedFingers;
+          }
+        }
+      } else {
+        fingerCountElement.textContent = '0';
+        previousFingerCount = 0;
+      }
+      
+      canvasCtx.restore();
+    }
+    
+    // Start camera
+    async function startCamera() {
+      try {
+        camera = new Camera(videoElement, {
+          onFrame: async () => {
+            await hands.send({image: videoElement});
+          },
+          width: 640,
+          height: 480
+        });
+        
+        await camera.start();
+        
+        startCameraButton.disabled = true;
+        stopCameraButton.disabled = false;
+        
+        videoElement.addEventListener('loadedmetadata', setupCanvas);
+      } catch (error) {
+        console.error('Error starting camera:', error);
+        alert('Failed to start camera. Please make sure you have granted camera permissions.');
+      }
+    }
+    
+    // Stop camera
+    function stopCamera() {
+      if (camera) {
+        camera.stop();
+        startCameraButton.disabled = false;
+        stopCameraButton.disabled = true;
+        fingerCountElement.textContent = '0';
+      }
+    }
+    
+    // Event listeners
+    startCameraButton.addEventListener('click', startCamera);
+    stopCameraButton.addEventListener('click', stopCamera);
+    enableSoundButton.addEventListener('click', initAudio);
+    disableSoundButton.addEventListener('click', () => {
+      soundEnabled = false;
+      enableSoundButton.disabled = false;
+      disableSoundButton.disabled = true;
+    });
+    
+    // Initialize MediaPipe Hands
+    hands.onResults(onResults);
+  </script>
+</body>
+</html>

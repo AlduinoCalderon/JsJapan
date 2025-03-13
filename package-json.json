@@ -1,0 +1,12 @@
+{
+  "name": "gesture-sound-app",
+  "version": "1.0.0",
+  "description": "A web app that identifies finger gestures and plays sounds",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2"
+  }
+}

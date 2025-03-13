@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="utf-8">
+	<title>denaripam_016_TeachingMaterials</title>
+	<script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils@0.2.1617146986/drawing_utils.js" crossorigin="anonymous"></script>
+	<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.1.1617146909/camera_utils.js" crossorigin="anonymous"></script>
+	<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.1.1617147326/hands.js" crossorigin="anonymous"></script>
+</head>
+
+<body>
+	<div class="container" style="position:relative; overflow:hidden;">
+		<video class="input_video" style="width:1px; height:1px; opacity:0,0;"></video>
+		<canvas class="output_canvas" width="1280px" height="720px" style="transform:scale(-1,1); width:100%;"></canvas>
+	</div>
+
+<script type="module">
+const videoElement = document.getElementsByClassName('input_video')[0];
+const canvasElement = document.getElementsByClassName('output_canvas')[0];
+const canvasCtx = canvasElement.getContext('2d');
+
+function onResults(results) {
+	canvasCtx.save();
+	canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+	canvasCtx.drawImage(
+			results.image, 0, 0, canvasElement.width, canvasElement.height);
+	if (results.multiHandLandmarks) {
+		for (const landmarks of results.multiHandLandmarks) {
+			drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS,
+										 {color: '#FF3399', lineWidth: 5});
+			drawLandmarks(canvasCtx, landmarks, {color: '#0099FF', lineWidth: 2});
+			
+			const finger=8;
+            const overlayrect=canvasElement.getBoundingClientRect();
+            const chkpos={
+            	x:(1 - landmarks[finger].x)	*overlayrect.width,
+            	y:landmarks[finger].y *overlayrect.height,
+            	z:landmarks[finger].z,
+            };
+            console.log("x:" + chkpos.x);
+            console.log("y:" + chkpos.y);
+            
+            //----- Customization Code3 -----
+            
+            const delimg=document.getElementById("finger");
+            if(delimg) delimg.remove();
+            
+            const img = document.createElement('img');
+            img.src = 'denaripam_logo.png';
+            img.id = 'finger';
+            img.style.cssText = 'position:absolute;';
+            
+            img.style.left  = chkpos.x + 'px';
+            img.style.top   = chkpos.y + 'px';
+            document.getElementById('detect_parent').appendChild(img);
+            
+            //----- Customization Code4 -----
+            
+            img.style.left  = chkpos.x - (img.width/2) + 'px';
+            img.style.top   = chkpos.y - (img.height/2) + 'px';
+		}
+	}
+	canvasCtx.restore();
+}
+
+const hands = new Hands({locateFile: (file) => {
+	return `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.1.1617147326/${file}`;
+}});
+hands.setOptions({
+	maxNumHands: 2,
+	minDetectionConfidence: 0.5,
+	minTrackingConfidence: 0.5
+});
+hands.onResults(onResults);
+
+const camera = new Camera(videoElement, {
+	onFrame: async () => {
+		await hands.send({image: videoElement});
+	},
+	width: 1280,
+	height: 720
+});
+camera.start();
+</script>
+
+</body>
+
+</html>

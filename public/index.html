@@ -8,10 +8,12 @@
     body {
       font-family: Arial, sans-serif;
       margin: 0;
-      padding: 20px;
+      padding: 0;
+      overflow: hidden;
       display: flex;
-      flex-direction: column;
+      justify-content: center;
       align-items: center;
+      height: 100vh;
       background-color: #f0f0f0;
     }
     
@@ -28,37 +30,35 @@
     }
     
     .video-container {
-      position: relative;
-      margin: 20px 0;
-      width: 80rem;
-      height: 60rem;
-      border: 3px solid #333;
-      border-radius: 10px;
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
       overflow: hidden;
     }
     
-    #video {
+    #video, #canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
       width: 100%;
       height: 100%;
       object-fit: cover;
       transform: scaleX(-1);
     }
     
-    #canvas {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      transform: scaleX(-1);
-    }
-    
     .controls {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
       display: flex;
       flex-direction: column;
       gap: 10px;
-      margin: 20px 0;
-      width: 100%;
+      background-color: rgba(255, 255, 255, 0.8);
+      padding: 10px;
+      border-radius: 10px;
     }
     
     .control-row {
@@ -144,37 +144,6 @@
       </div>
     </div>
     
-    <h2>Gesture Sound Mapping</h2>
-    <table class="sound-mapping">
-      <thead>
-        <tr>
-          <th>Fingers</th>
-          <th>Sound</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td>1 finger</td>
-          <td>Piano C note</td>
-        </tr>
-        <tr>
-          <td>2 fingers</td>
-          <td>Piano D note</td>
-        </tr>
-        <tr>
-          <td>3 fingers</td>
-          <td>Piano E note</td>
-        </tr>
-        <tr>
-          <td>4 fingers</td>
-          <td>Piano F note</td>
-        </tr>
-        <tr>
-          <td>5 fingers</td>
-          <td>Piano G note</td>
-        </tr>
-      </tbody>
-    </table>
   </div>
 
   <script>
@@ -191,7 +160,7 @@
     // Audio context and sounds
     let audioContext;
     let soundEnabled = false;
-    const sounds = {};
+    const audioFile = new Audio('./Cable.mp3');
     
     // MediaPipe Hands
     const hands = new Hands({
@@ -201,7 +170,7 @@
     });
     
     hands.setOptions({
-      maxNumHands: 1,
+      maxNumHands: 4,
       modelComplexity: 1,
       minDetectionConfidence: 0.5,
       minTrackingConfidence: 0.5
@@ -217,41 +186,10 @@
       canvasElement.height = videoElement.videoHeight;
     }
     
-    // Initialize audio context and load sounds
+    // Initialize audio context
     async function initAudio() {
       try {
         audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        
-        // Define notes frequencies
-        const noteFrequencies = {
-          'C': 261.63, // C4
-          'D': 293.66, // D4
-          'E': 329.63, // E4
-          'F': 349.23, // F4
-          'G': 392.00  // G4
-        };
-        
-        // Create oscillator functions for each note
-        for (const [note, frequency] of Object.entries(noteFrequencies)) {
-          sounds[note] = () => {
-            const oscillator = audioContext.createOscillator();
-            const gainNode = audioContext.createGain();
-            
-            oscillator.type = 'sine';
-            oscillator.frequency.setValueAtTime(frequency, audioContext.currentTime);
-            
-            gainNode.gain.setValueAtTime(0, audioContext.currentTime);
-            gainNode.gain.linearRampToValueAtTime(0.5, audioContext.currentTime + 0.1);
-            gainNode.gain.linearRampToValueAtTime(0, audioContext.currentTime + 1);
-            
-            oscillator.connect(gainNode);
-            gainNode.connect(audioContext.destination);
-            
-            oscillator.start();
-            oscillator.stop(audioContext.currentTime + 1);
-          };
-        }
-        
         soundEnabled = true;
         enableSoundButton.disabled = true;
         disableSoundButton.disabled = false;
@@ -261,49 +199,40 @@
       }
     }
     
-    // Play sound based on finger count
-    function playSound(fingerCount) {
-      if (!soundEnabled || !audioContext) return;
-      
-      const notes = ['C', 'D', 'E', 'F', 'G'];
-      if (fingerCount >= 1 && fingerCount <= 5) {
-        const note = notes[fingerCount - 1];
-        sounds[note]();
+    let currentGif = null;
+    // Mostrar GIF en la palma de cada mano detectada
+    function showGifOnPalm(landmarks) {
+      if (currentGif) {
+        document.body.removeChild(currentGif);
       }
+      const palmBase = landmarks[0];
+      const gif = new Image();
+      gif.src = './Aldo.gif';
+      gif.style.position = 'absolute';
+      gif.style.left = `${(1 - palmBase.x) * (window.innerWidth/1.05)}px`;
+      gif.style.top = `${(palmBase.y * window.innerHeight)-500}px`;
+      gif.style.width = '375px';
+      gif.style.height = '638px';
+      document.body.appendChild(gif);
+      currentGif = gif;
+      setTimeout(() => {
+        if (currentGif === gif) {
+          document.body.removeChild(gif);
+          currentGif = null;
+        }
+      }, 2000); // Remove GIF after 2 seconds
     }
     
-    // Count extended fingers
-    function countExtendedFingers(landmarks) {
-      // Define finger tip indices
-      const tipIndices = [4, 8, 12, 16, 20]; // thumb, index, middle, ring, pinky
-      const pipIndices = [2, 6, 10, 14, 18]; // proximal joints
-      
-      let extendedFingers = 0;
-      
-      // Check if each finger is extended
-      for (let i = 0; i < 5; i++) {
-        const tip = landmarks[tipIndices[i]];
-        const pip = landmarks[pipIndices[i]];
-        
-        // Special case for thumb (compare with wrist)
-        if (i === 0) {
-          const wrist = landmarks[0];
-          if (tip.x < wrist.x) { // Thumb is considered extended if it's to the left of the wrist
-            extendedFingers++;
-          }
-        } else {
-          // For other fingers, compare tip Y coordinate with PIP Y coordinate
-          if (tip.y < pip.y) {
-            extendedFingers++;
-          }
-        }
-      }
-      
-      return extendedFingers;
+    // Calcular y mostrar la posición de cada punto de referencia (landmark)
+    function logLandmarkPositions(landmarks) {
+      landmarks.forEach((landmark, index) => {
+        console.log(`Landmark ${index}: x=${landmarks[index].x}, y=${landmarks[index].y}, z=${landmarks[index].z}`);
+      });
     }
     
     // Process results from MediaPipe Hands
     function onResults(results) {
+      console.log('Processing results');
       canvasCtx.save();
       canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
       
@@ -311,22 +240,28 @@
       canvasCtx.drawImage(videoElement, 0, 0, canvasElement.width, canvasElement.height);
       
       if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
-        // Draw hand landmarks
+        console.log('Detected hands:', results.multiHandLandmarks.length);
         for (const landmarks of results.multiHandLandmarks) {
-          drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, {color: '#00FF00', lineWidth: 5});
-          drawLandmarks(canvasCtx, landmarks, {color: '#FF0000', lineWidth: 2});
+          logLandmarkPositions(landmarks); // Log positions of landmarks
+          //drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, {color: '#00FF00', transparency: 0.9, lineWidth: 2});
+          //drawLandmarks(canvasCtx, landmarks, {color: '#FF0000', transparency: 0.9, lineWidth: 1});
           
           // Count extended fingers
           const extendedFingers = countExtendedFingers(landmarks);
           fingerCountElement.textContent = extendedFingers;
           
-          // Play sound when finger count changes
-          if (previousFingerCount !== extendedFingers) {
-            playSound(extendedFingers);
-            previousFingerCount = extendedFingers;
+          // Detect specific hand gestures
+          if (isLeftPalmUp(landmarks)) {
+            console.log('Left palm is up');
+            showGifOnPalm(landmarks);
+          }
+          if (isRightHandFourFingersUp(landmarks)) {
+            console.log('Right hand gesture detected');
+            playAudio();
           }
         }
       } else {
+        console.log('No hands detected');
         fingerCountElement.textContent = '0';
         previousFingerCount = 0;
       }
@@ -379,6 +314,70 @@
     
     // Initialize MediaPipe Hands
     hands.onResults(onResults);
+    
+    // Detect if left palm is up
+    function isLeftPalmUp(landmarks) {
+      const palmBase = landmarks[0];
+      const isUp = palmBase.y < landmarks[9].y;
+      console.log('Checking left palm up:', isUp);
+      return isUp; // Check if palm is facing up
+    }
+    
+    // Detect if right hand has four fingers up with thumb inside
+    function isRightHandFourFingersUp(landmarks) {
+      const tipIndices = [8, 12, 16, 20]; // Index, middle, ring, pinky
+      const pipIndices = [6, 10, 14, 18];
+      let extendedFingers = 0;
+      for (let i = 0; i < 4; i++) {
+        if (landmarks[tipIndices[i]].y < landmarks[pipIndices[i]].y) {
+          extendedFingers++;
+        }
+      }
+      const thumbInside = landmarks[4].x > landmarks[3].x; // Thumb is inside
+      const gestureDetected = extendedFingers === 4 && thumbInside;
+      console.log('Checking right hand gesture:', gestureDetected);
+      return gestureDetected;
+    }
+    
+    // Play audio
+    function playAudio() {
+      if (soundEnabled && audioFile.paused) {
+        audioFile.play();
+        setTimeout(() => {
+          audioFile.pause();
+        }, 10000); // Detener la música después de 10 segundos
+      }
+    }
+    
+    // Count extended fingers
+    function countExtendedFingers(landmarks) {
+      // Define finger tip indices
+      const tipIndices = [4, 8, 12, 16, 20]; // thumb, index, middle, ring, pinky
+      const pipIndices = [2, 6, 10, 14, 18]; // proximal joints
+      
+      let extendedFingers = 0;
+      
+      // Check if each finger is extended
+      for (let i = 0; i < 5; i++) {
+        const tip = landmarks[tipIndices[i]];
+        const pip = landmarks[pipIndices[i]];
+        
+        // Special case for thumb (compare with wrist)
+        if (i === 0) {
+          const wrist = landmarks[0];
+          if (tip.x < wrist.x) { // Thumb is considered extended if it's to the left of the wrist
+            extendedFingers++;
+          }
+        } else {
+          // For other fingers, compare tip Y coordinate with PIP Y coordinate
+          if (tip.y < pip.y) {
+            extendedFingers++;
+          }
+        }
+      }
+      
+      return extendedFingers;
+    }
   </script>
 </body>
 </html>
